@@ -1,0 +1,142 @@
+🔹 Step 1: Check Current Cgroup Version
+stat -fc %T /sys/fs/cgroup/
+
+
+Output cgroup2fs → already using cgroup v2
+
+Output cgroup2fs mixed with cgroupfs → hybrid mode
+
+Output cgroupfs → still on v1
+
+##
+🔹 Step 2: Enable Cgroup v2 via GRUB
+
+Edit GRUB config:
+
+sudo nano /etc/default/grub
+
+
+Find the line:
+
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
+
+
+Change it to:
+
+GRUB_CMDLINE_LINUX_DEFAULT="systemd.unified_cgroup_hierarchy=1 cgroup_enable=memory swapaccount=1"
+
+
+systemd.unified_cgroup_hierarchy=1 → enables cgroup v2
+
+cgroup_enable=memory → enables memory controller
+
+swapaccount=1 → lets cgroups account for swap usage
+
+Update GRUB:
+
+sudo update-grub
+
+
+Reboot:
+
+sudo reboot
+########
+🔹 Step 3: Verify After Reboot
+stat -fc %T /sys/fs/cgroup/
+
+
+You should see:
+
+cgroup2fs
+
+
+Check available controllers:
+
+cat /sys/fs/cgroup/cgroup.controllers
+
+
+You should see things like:
+
+cpuset cpu io memory pids rdma
+
+###
+🔹 Step 4: Ensure Container Runtime Uses Cgroup v2
+
+For containerd:
+
+sudo nano /etc/containerd/config.toml
+
+
+Set:
+
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+  SystemdCgroup = true
+
+
+Restart:
+
+sudo systemctl restart containerd
+
+
+For Docker:
+
+sudo mkdir -p /etc/docker
+cat <<EOF | sudo tee /etc/docker/daemon.json
+{
+  "exec-opts": ["native.cgroupdriver=systemd"]
+}
+EOF
+
+sudo systemctl restart docker
+
+##
+
+🔹 Fix: Enable SystemdCgroup = true
+
+Edit:
+
+sudo nano /etc/containerd/config.toml
+
+
+Find this section:
+
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc.options]
+    BinaryName = ''
+    CriuImagePath = ''
+    CriuWorkPath = ''
+    IoGid = 0
+    IoUid = 0
+    NoNewKeyring = false
+    Root = ''
+    ShimCgroup = ''
+
+
+👉 Add this line inside it:
+
+    SystemdCgroup = true
+
+
+So it becomes:
+
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc.options]
+    SystemdCgroup = true
+    BinaryName = ''
+    CriuImagePath = ''
+    CriuWorkPath = ''
+    IoGid = 0
+    IoUid = 0
+    NoNewKeyring = false
+    Root = ''
+    ShimCgroup = ''
+
+🔹 Restart containerd
+sudo systemctl restart containerd
+
+
+Check status:
+
+sudo systemctl status containerd
+
+
+
+
