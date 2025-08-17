@@ -1,0 +1,93 @@
+Metrics 
+===
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+kubectl get pods -n kube-system
+kubectl logs metrics-server-7ffbc6d68-dff5m -n kube-system
+wget -c https://gist.githubusercontent.com/initcron/1a2bd25353e1faa22a0ad41ad1c01b62/raw/008e23f9fbf4d7e2cf79df1dd008de2f1db62a10/k8s-metrics-server.patch.yaml
+vi k8s-metrics-server.patch.yaml 
+
+kubectl get deployment -n kube-system
+kubectl edit deployment metrics-server -n kube-system
+kubectl patch deploy metrics-server -p "$(cat k8s-metrics-server.patch.yaml)" -n kube-system
+kubectl edit deployment metrics-server -n kube-system
+kubectl get pods -n kube-system
+kubectl top pods 
+
+kubectl top nodes 
+clear
+kubectl top pods -n kube-system
+
+
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  name: php-apache
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    run: php-apache
+status:
+  loadBalancer: {}
+---
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    run: php-apache
+  name: php-apache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: php-apache
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        run: php-apache
+    spec:
+      containers:
+      - image: k8s.gcr.io/hpa-example
+        name: php-apache
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 200m
+status: {}
+
+===
+
+HPA 
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  creationTimestamp: null
+  name: php-apache
+spec:
+  maxReplicas: 10
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: php-apache
+  targetCPUUtilizationPercentage: 50
+status:
+  currentReplicas: 0
+  desiredReplicas: 0
+===
+
+kubectl run -i --tty load-generator --image=busybox /bin/sh
+
+while true; do wget -q -O- http://php-apache.default.svc.cluster.local; done
+
+--
+On another terminal (desktop version of our master) 
+kubectl get hpa
